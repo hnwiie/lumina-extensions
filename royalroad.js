@@ -138,17 +138,14 @@ export default {
 
     const coverUrl = this._extractWindowVar(html, "fictionCover") || "";
 
-    // Synopsis
+    // Synopsis — tüm p elementlerini al (.hidden-content dahil)
     let synopsis = "";
-    const synSelectors = [
-      ".fiction-description .description-content",
-      ".description .fiction-description",
-      ".fiction .description p",
-      "[class*='description'] p",
-    ];
-    for (const sel of synSelectors) {
-      const el = doc.querySelector(sel);
-      if (el && el.textContent.trim()) { synopsis = el.textContent.trim(); break; }
+    const descEl = doc.querySelector(".description");
+    if (descEl) {
+      synopsis = Array.from(descEl.querySelectorAll("p"))
+        .map(function(p) { return p.textContent.trim(); })
+        .filter(Boolean)
+        .join("\n\n");
     }
 
     // Yazar
