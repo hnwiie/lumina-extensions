@@ -163,7 +163,12 @@ export default {
     const statusEl = doc.querySelector(".label.label-sm, .fiction-status");
     const status   = statusEl && statusEl.textContent.toLowerCase().includes("ongoing") ? "Ongoing" : "Completed";
 
-    return { coverUrl, synopsis, author, publishDate, status };
+    // Genres — span.tags a.fiction-tag
+    const genres = Array.from(doc.querySelectorAll("span.tags a.fiction-tag"))
+      .map(function(a) { return a.textContent.trim(); })
+      .filter(Boolean);
+
+    return { coverUrl, synopsis, author, publishDate, status, genres };
   },
 
   // ─── Chapter listesi ──────────────────────────────────
