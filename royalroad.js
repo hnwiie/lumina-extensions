@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //  LUMINA EXTENSION — Royal Road
 //  Site: https://www.royalroad.com
-//  Version: 1.0.0
+//  Version: 2.0.0
 // ═══════════════════════════════════════════════════════
 
 export default {
@@ -19,35 +19,44 @@ export default {
     return this.baseUrl + (path.startsWith("/") ? path : "/" + path);
   },
 
-  _cleanText(text) {
-    return text?.replace(/\s+/g, " ").trim() ?? "";
+  // HTML içinden window.X = ... değişkenlerini çek
+  _extractWindowVar(html, varName) {
+    const lines = html.split("\n");
+    for (const line of lines) {
+      if (line.includes(`window.${varName}`)) {
+        const match = line.match(/=\s*(.+?);?\s*$/);
+        if (match) {
+          try { return JSON.parse(match[1].trim().replace(/;$/, "")); }
+          catch { return null; }
+        }
+      }
+    }
+    return null;
   },
 
-  // ─── Novel listesi (Best Rated) ───────────────────────
+  // ─── Novel listesi ────────────────────────────────────
   async getNovels(page = 1) {
-    const res = await fetch(`${this.baseUrl}/fictions/best-rated?page=${page}`);
+    const res = await fetch(
+      `${this.baseUrl}/fictions/best-rated?page=${page}`,
+      { headers: { "User-Agent": "Mozilla/5.0" } }
+    );
     const html = await res.text();
     const doc = this._parse(html);
 
     return Array.from(doc.querySelectorAll(".fiction-list-item")).map((el) => {
-      const titleEl  = el.querySelector(".fiction-title a");
+      const titleEl  = el.querySelector("h2.fiction-title a, .fiction-title a");
       const imgEl    = el.querySelector("img");
-      const authorEl = el.querySelector(".author-name a, .author a");
-      const tagsEl   = el.querySelectorAll(".tags .label");
-      const synopsisEl = el.querySelector(".fiction-description p, .description p");
-
-      const href = titleEl?.getAttribute("href") ?? "";
-      const url  = this._url(href);
+      const authorEl = el.querySelector(".author span[property='name'], .author a");
+      const href     = titleEl?.getAttribute("href") ?? "";
+      const url      = this._url(href);
 
       return {
         id:       url,
-        title:    this._cleanText(titleEl?.textContent ?? ""),
+        title:    titleEl?.textContent?.trim() ?? "",
         url,
-        coverUrl: imgEl?.getAttribute("src") ?? imgEl?.getAttribute("data-src") ?? "",
-        author:   this._cleanText(authorEl?.textContent ?? ""),
-        synopsis: this._cleanText(synopsisEl?.textContent ?? ""),
+        coverUrl: imgEl?.getAttribute("data-src") ?? imgEl?.getAttribute("src") ?? "",
+        author:   authorEl?.textContent?.trim() ?? "",
         status:   "Ongoing",
-        genres:   Array.from(tagsEl).map((t) => this._cleanText(t.textContent)),
       };
     }).filter((n) => n.url && n.title);
   },
@@ -55,80 +64,118 @@ export default {
   // ─── Arama ────────────────────────────────────────────
   async searchNovels(query, page = 1) {
     const q = encodeURIComponent(query);
-    const res = await fetch(`${this.baseUrl}/fictions/search?title=${q}&page=${page}`);
+    const res = await fetch(
+      `${this.baseUrl}/fictions/search?title=${q}&page=${page}`,
+      { headers: { "User-Agent": "Mozilla/5.0" } }
+    );
     const html = await res.text();
     const doc  = this._parse(html);
 
     return Array.from(doc.querySelectorAll(".fiction-list-item")).map((el) => {
-      const titleEl  = el.querySelector(".fiction-title a");
+      const titleEl  = el.querySelector("h2.fiction-title a, .fiction-title a");
       const imgEl    = el.querySelector("img");
-      const authorEl = el.querySelector(".author-name a, .author a");
+      const authorEl = el.querySelector(".author span[property='name'], .author a");
       const href     = titleEl?.getAttribute("href") ?? "";
       const url      = this._url(href);
 
       return {
         id:       url,
-        title:    this._cleanText(titleEl?.textContent ?? ""),
+        title:    titleEl?.textContent?.trim() ?? "",
         url,
-        coverUrl: imgEl?.getAttribute("src") ?? imgEl?.getAttribute("data-src") ?? "",
-        author:   this._cleanText(authorEl?.textContent ?? ""),
+        coverUrl: imgEl?.getAttribute("data-src") ?? imgEl?.getAttribute("src") ?? "",
+        author:   authorEl?.textContent?.trim() ?? "",
         status:   "Ongoing",
       };
     }).filter((n) => n.url && n.title);
   },
 
-  // ─── Chapter listesi ──────────────────────────────────
-  async getChapters(novelUrl) {
-    const res  = await fetch(novelUrl);
+  // ─── Novel detayı ─────────────────────────────────────
+  async getNovelDetail(novelUrl) {
+    const res  = await fetch(novelUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await res.text();
     const doc  = this._parse(html);
 
-    // RoyalRoad chapter listesi — tbody içindeki tr'ler
-    const rows = doc.querySelectorAll(".chapter-list tr, table.chapters tr");
+    // Kapak — window.fictionCover'dan
+    const coverUrl = this._extractWindowVar(html, "fictionCover") ?? "";
 
-    const chapters = Array.from(rows).map((row, i) => {
-      const linkEl = row.querySelector("a[href*='/chapter/']");
-      const dateEl = row.querySelector("time");
-      if (!linkEl) return null;
+    // Synopsis
+    const synopsisEl = doc.querySelector(".fiction-description .description, .description .fiction-description");
+    const synopsis   = synopsisEl?.textContent?.trim() ?? "";
 
-      const href  = linkEl.getAttribute("href") ?? "";
-      const url   = this._url(href);
+    // Yazar
+    const authorEl = doc.querySelector("span[property='author'] span[property='name'], .fiction-info .author");
+    const author   = authorEl?.textContent?.trim() ?? "";
 
-      return {
-        id:            url,
-        title:         this._cleanText(linkEl.textContent ?? `Chapter ${i + 1}`),
-        url,
-        date:          dateEl?.getAttribute("title") ?? dateEl?.textContent?.trim(),
+    // Status
+    const statusEl = doc.querySelector(".label-sm.label-default, .fiction-status");
+    const status   = statusEl?.textContent?.trim().toLowerCase().includes("ongoing") ? "Ongoing" : "Completed";
+
+    return { coverUrl, synopsis, author, status };
+  },
+
+  // ─── Chapter listesi — window.chapters'dan ────────────
+  async getChapters(novelUrl) {
+    const res  = await fetch(novelUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const html = await res.text();
+
+    // window.chapters = [...] içindeki veriyi çek
+    const chaptersData = this._extractWindowVar(html, "chapters");
+
+    if (chaptersData && Array.isArray(chaptersData) && chaptersData.length > 0) {
+      return chaptersData.map((ch, i) => ({
+        id:            String(ch.id ?? i),
+        title:         ch.title ?? `Chapter ${i + 1}`,
+        url:           this._url(ch.url ?? ""),
         chapterNumber: i + 1,
-      };
-    }).filter(Boolean);
+        date:          ch.date ? new Date(ch.date * 1000).toLocaleDateString() : "",
+      })).filter((ch) => ch.url);
+    }
+
+    // Fallback: HTML'den chapter tablosunu parse et
+    const doc   = this._parse(html);
+    const rows  = doc.querySelectorAll("table.chapter-list tbody tr, .chapters li");
+    const chapters = [];
+
+    Array.from(rows).forEach((row, i) => {
+      const linkEl = row.querySelector("a[href*='/chapter/']");
+      if (!linkEl) return;
+      const url = this._url(linkEl.getAttribute("href") ?? "");
+      if (!url) return;
+      chapters.push({
+        id:            String(i),
+        title:         linkEl.textContent?.trim() ?? `Chapter ${i + 1}`,
+        url,
+        chapterNumber: i + 1,
+      });
+    });
 
     return chapters;
   },
 
   // ─── Chapter içeriği ──────────────────────────────────
   async getChapterContent(chapterUrl) {
-    const res  = await fetch(chapterUrl);
+    const res  = await fetch(chapterUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
     const html = await res.text();
     const doc  = this._parse(html);
 
-    // RoyalRoad chapter content container
-    const content = doc.querySelector(".chapter-content");
+    // RoyalRoad chapter content: div.chapter-inner.chapter-content
+    const content = doc.querySelector(
+      "div.chapter-inner.chapter-content, div.chapter-content, .chapter-inner"
+    );
+
     if (!content) return "İçerik yüklenemedi.";
 
-    // Reklam ve gereksiz elementleri temizle
+    // Reklam ve gereksiz elementleri kaldır
     content.querySelectorAll(
-      "script, style, .ads, .adsbygoogle, [class*='ad-'], ins, .author-note-portlet"
+      "script, style, .ads, .adsbygoogle, [class*='ad-'], ins, .hidden"
     ).forEach((el) => el.remove());
 
     // Paragrafları al
-    const paragraphs = content.querySelectorAll("p");
-    if (paragraphs.length > 0) {
-      return Array.from(paragraphs)
-        .map((p) => p.textContent?.trim())
-        .filter(Boolean)
-        .join("\n\n");
-    }
+    const paragraphs = Array.from(content.querySelectorAll("p"))
+      .map((p) => p.textContent?.trim())
+      .filter(Boolean);
+
+    if (paragraphs.length > 0) return paragraphs.join("\n\n");
 
     return content.textContent?.trim() ?? "İçerik bulunamadı.";
   },
