@@ -1,7 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//  LUMINA EXTENSION — Royal Road
-//  Site: https://www.royalroad.com
-//  Version: 3.0.0
+//  LUMINA EXTENSION — Royal Road  v4.0.0
 // ═══════════════════════════════════════════════════════
 
 export default {
@@ -19,192 +17,211 @@ export default {
     return this.baseUrl + (path.startsWith("/") ? path : "/" + path);
   },
 
-  // HTML'den window.X = ... değişkenini çek
   _extractWindowVar(html, varName) {
     const lines = html.split("\n");
     for (const line of lines) {
-      if (line.includes(`window.${varName}`)) {
+      if (line.includes("window." + varName)) {
         const eqIdx = line.indexOf("=");
         if (eqIdx === -1) continue;
-        let val = line.slice(eqIdx + 1).trim().replace(/;$/, "").trim();
+        const val = line.slice(eqIdx + 1).trim().replace(/;$/, "").trim();
         try { return JSON.parse(val); } catch { return null; }
       }
     }
     return null;
   },
 
-  // Unix timestamp → okunabilir tarih
-  _formatDate(ts) {
-    if (!ts) return "";
-    // RoyalRoad bazen ms, bazen saniye verir
-    const ms = ts > 1e10 ? ts : ts * 1000;
-    return new Date(ms).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  // Herhangi bir tarih formatını parse et
+  _formatDate(val) {
+    if (!val) return "";
+    try {
+      let date;
+      if (typeof val === "number") {
+        // Unix timestamp — saniye mi milisaniye mi?
+        date = new Date(val > 1e10 ? val : val * 1000);
+      } else if (typeof val === "string") {
+        date = new Date(val);
+      } else {
+        return "";
+      }
+      if (isNaN(date.getTime())) return "";
+      return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    } catch { return ""; }
+  },
+
+  _headers() {
+    return { "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/91.0" };
   },
 
   // ─── Novel listesi ────────────────────────────────────
-  async getNovels(page = 1) {
-    const res = await fetch(
-      `${this.baseUrl}/fictions/best-rated?page=${page}`,
-      { headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36" } }
-    );
+  async getNovels(page) {
+    page = page || 1;
+    const res = await fetch(this.baseUrl + "/fictions/best-rated?page=" + page, { headers: this._headers() });
     const html = await res.text();
     const doc  = this._parse(html);
 
     return Array.from(doc.querySelectorAll(".fiction-list-item")).map((el) => {
-      const titleEl  = el.querySelector("h2.fiction-title a, .fiction-title a");
-      const imgEl    = el.querySelector("img.lazyload, img[data-src], img");
-      // Yazar: ".author a" veya ".author-name a"
-      const authorEl = el.querySelector(".author a, .author-name a, span.author a");
-      const href     = titleEl?.getAttribute("href") ?? "";
-      const url      = this._url(href);
+      const titleEl = el.querySelector("h2.fiction-title a, .fiction-title a");
+      const imgEl   = el.querySelector("img");
+      const href    = titleEl ? titleEl.getAttribute("href") : "";
+      const url     = this._url(href || "");
 
-      return {
-        id:       url,
-        title:    titleEl?.textContent?.trim() ?? "",
-        url,
-        coverUrl: imgEl?.getAttribute("data-src") ?? imgEl?.getAttribute("src") ?? "",
-        author:   authorEl?.textContent?.trim() ?? "",
-        status:   "Ongoing",
-      };
-    }).filter((n) => n.url && n.title);
+      // Yazar — çeşitli yerlerde olabilir
+      let author = "";
+      const authorCandidates = [
+        el.querySelector(".author a"),
+        el.querySelector(".author-name a"),
+        el.querySelector("span.author a"),
+        el.querySelector("[class*='author'] a"),
+      ];
+      for (const a of authorCandidates) {
+        if (a && a.textContent.trim()) { author = a.textContent.trim(); break; }
+      }
+
+      // Kapak
+      const coverUrl = (imgEl && (imgEl.getAttribute("data-src") || imgEl.getAttribute("src"))) || "";
+
+      return { id: url, title: (titleEl ? titleEl.textContent.trim() : ""), url, coverUrl, author, status: "Ongoing" };
+    }).filter(function(n) { return n.url && n.title; });
   },
 
   // ─── Arama ────────────────────────────────────────────
-  async searchNovels(query, page = 1) {
+  async searchNovels(query, page) {
+    page = page || 1;
     const q   = encodeURIComponent(query);
-    const res = await fetch(
-      `${this.baseUrl}/fictions/search?title=${q}&page=${page}`,
-      { headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36" } }
-    );
+    const res = await fetch(this.baseUrl + "/fictions/search?title=" + q + "&page=" + page, { headers: this._headers() });
     const html = await res.text();
     const doc  = this._parse(html);
 
     return Array.from(doc.querySelectorAll(".fiction-list-item")).map((el) => {
-      const titleEl  = el.querySelector("h2.fiction-title a, .fiction-title a");
-      const imgEl    = el.querySelector("img.lazyload, img[data-src], img");
-      const authorEl = el.querySelector(".author a, .author-name a, span.author a");
-      const href     = titleEl?.getAttribute("href") ?? "";
-      const url      = this._url(href);
+      const titleEl = el.querySelector("h2.fiction-title a, .fiction-title a");
+      const imgEl   = el.querySelector("img");
+      const href    = titleEl ? titleEl.getAttribute("href") : "";
+      const url     = this._url(href || "");
 
-      return {
-        id:       url,
-        title:    titleEl?.textContent?.trim() ?? "",
-        url,
-        coverUrl: imgEl?.getAttribute("data-src") ?? imgEl?.getAttribute("src") ?? "",
-        author:   authorEl?.textContent?.trim() ?? "",
-        status:   "Ongoing",
-      };
-    }).filter((n) => n.url && n.title);
+      let author = "";
+      const authorCandidates = [
+        el.querySelector(".author a"),
+        el.querySelector(".author-name a"),
+        el.querySelector("[class*='author'] a"),
+      ];
+      for (const a of authorCandidates) {
+        if (a && a.textContent.trim()) { author = a.textContent.trim(); break; }
+      }
+
+      const coverUrl = (imgEl && (imgEl.getAttribute("data-src") || imgEl.getAttribute("src"))) || "";
+      return { id: url, title: (titleEl ? titleEl.textContent.trim() : ""), url, coverUrl, author, status: "Ongoing" };
+    }).filter(function(n) { return n.url && n.title; });
   },
 
   // ─── Novel detayı ─────────────────────────────────────
   async getNovelDetail(novelUrl) {
-    const res  = await fetch(novelUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36" }
-    });
+    const res  = await fetch(novelUrl, { headers: this._headers() });
     const html = await res.text();
     const doc  = this._parse(html);
 
-    // Kapak — window.fictionCover
-    const coverUrl = this._extractWindowVar(html, "fictionCover") ?? "";
+    const coverUrl = this._extractWindowVar(html, "fictionCover") || "";
 
-    // Synopsis — .fiction-description p veya .description
-    const synopsisEl = doc.querySelector(
-      ".fiction-description .description-content, .fiction .description, .fic-description p"
-    );
-    const synopsis = synopsisEl?.textContent?.trim() ?? "";
+    // Synopsis
+    let synopsis = "";
+    const synSelectors = [
+      ".fiction-description .description-content",
+      ".description .fiction-description",
+      ".fiction .description p",
+      "[class*='description'] p",
+    ];
+    for (const sel of synSelectors) {
+      const el = doc.querySelector(sel);
+      if (el && el.textContent.trim()) { synopsis = el.textContent.trim(); break; }
+    }
 
-    // Yazar — çeşitli selector'lar dene
+    // Yazar
     let author = "";
     const authorSelectors = [
       "h4.font-white a",
       ".fic-title h4 a",
-      "div.fic-title div:last-child a",
+      "div.fic-title a[href*='/profile/']",
       "span[property='author'] a",
-      "[itemprop='author'] [itemprop='name']",
+      "[itemprop='author'] a",
       ".author-name a",
+      "h4 a[href*='/profile']",
     ];
     for (const sel of authorSelectors) {
       const el = doc.querySelector(sel);
-      if (el?.textContent?.trim()) { author = el.textContent.trim(); break; }
+      if (el && el.textContent.trim()) { author = el.textContent.trim(); break; }
     }
 
-    // Yayınlanma tarihi
+    // Yayın tarihi — time elementinden
     let publishDate = "";
-    const timeEl = doc.querySelector("time[unixtime], time[datetime], .date-posted time");
-    if (timeEl) {
-      const unix = timeEl.getAttribute("unixtime") ?? timeEl.getAttribute("data-time");
-      publishDate = unix ? this._formatDate(Number(unix)) : (timeEl.textContent?.trim() ?? "");
+    const timeEls = doc.querySelectorAll("time");
+    for (const t of Array.from(timeEls)) {
+      const unix = t.getAttribute("unixtime") || t.getAttribute("data-time");
+      if (unix) { publishDate = this._formatDate(Number(unix)); break; }
+      const dt = t.getAttribute("datetime");
+      if (dt) { publishDate = this._formatDate(dt); break; }
     }
 
-    // Status
-    const statusEl = doc.querySelector(".label.label-sm, .fiction-status, span.label-sm");
-    const status   = statusEl?.textContent?.trim().toLowerCase().includes("ongoing") ? "Ongoing" : "Completed";
+    const statusEl = doc.querySelector(".label.label-sm, .fiction-status");
+    const status   = statusEl && statusEl.textContent.toLowerCase().includes("ongoing") ? "Ongoing" : "Completed";
 
     return { coverUrl, synopsis, author, publishDate, status };
   },
 
-  // ─── Chapter listesi — window.chapters'dan ────────────
+  // ─── Chapter listesi ──────────────────────────────────
   async getChapters(novelUrl) {
-    const res  = await fetch(novelUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36" }
-    });
+    const res  = await fetch(novelUrl, { headers: this._headers() });
     const html = await res.text();
 
     const chaptersData = this._extractWindowVar(html, "chapters");
 
     if (chaptersData && Array.isArray(chaptersData) && chaptersData.length > 0) {
-      return chaptersData.map((ch, i) => ({
-        id:            String(ch.id ?? i),
-        title:         ch.title ?? `Chapter ${i + 1}`,
-        url:           this._url(ch.url ?? ""),
-        chapterNumber: i + 1,
-        // date alanı Unix timestamp (saniye)
-        date:          ch.date ? this._formatDate(ch.date) : "",
-      })).filter((ch) => ch.url);
+      const self = this;
+      return chaptersData.map(function(ch, i) {
+        // RoyalRoad date field adları: date, releaseDate, created
+        const dateVal = ch.date || ch.releaseDate || ch.created || null;
+        return {
+          id:            String(ch.id || i),
+          title:         ch.title || ("Chapter " + (i + 1)),
+          url:           self._url(ch.url || ""),
+          chapterNumber: i + 1,
+          date:          self._formatDate(dateVal),
+        };
+      }).filter(function(ch) { return ch.url; });
     }
 
-    // Fallback: HTML chapter tablosu
+    // Fallback HTML
     const doc  = this._parse(html);
-    const rows = doc.querySelectorAll("table.chapter-list tbody tr, .chapters li");
-    return Array.from(rows).map((row, i) => {
-      const linkEl = row.querySelector("a[href*='/chapter/']");
-      const timeEl = row.querySelector("time");
-      if (!linkEl) return null;
-      const url = this._url(linkEl.getAttribute("href") ?? "");
+    const rows = doc.querySelectorAll("table.chapter-list tbody tr");
+    const self = this;
+    return Array.from(rows).map(function(row, i) {
+      const link = row.querySelector("a[href*='/chapter/']");
+      const time = row.querySelector("time");
+      if (!link) return null;
+      const url = self._url(link.getAttribute("href") || "");
       if (!url) return null;
+      const dateAttr = time ? (time.getAttribute("datetime") || time.getAttribute("unixtime") || time.textContent.trim()) : "";
       return {
-        id:            String(i),
-        title:         linkEl.textContent?.trim() ?? `Chapter ${i + 1}`,
-        url,
-        chapterNumber: i + 1,
-        date:          timeEl?.getAttribute("title") ?? timeEl?.textContent?.trim() ?? "",
+        id: String(i), title: link.textContent.trim() || ("Chapter " + (i+1)),
+        url, chapterNumber: i + 1, date: self._formatDate(dateAttr),
       };
     }).filter(Boolean);
   },
 
   // ─── Chapter içeriği ──────────────────────────────────
   async getChapterContent(chapterUrl) {
-    const res  = await fetch(chapterUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36" }
-    });
+    const res  = await fetch(chapterUrl, { headers: this._headers() });
     const html = await res.text();
     const doc  = this._parse(html);
 
-    const content = doc.querySelector(
-      "div.chapter-inner.chapter-content, div.chapter-content, .chapter-inner"
-    );
+    const content = doc.querySelector("div.chapter-inner.chapter-content, .chapter-content, .chapter-inner");
     if (!content) return "İçerik yüklenemedi.";
 
-    content.querySelectorAll(
-      "script, style, .ads, .adsbygoogle, [class*='ad-'], ins, .hidden, .author-note-portlet"
-    ).forEach((el) => el.remove());
+    content.querySelectorAll("script, style, .ads, .adsbygoogle, [class*='ad-'], ins, .hidden, .author-note-portlet").forEach(function(el) { el.remove(); });
 
     const paragraphs = Array.from(content.querySelectorAll("p"))
-      .map((p) => p.textContent?.trim())
+      .map(function(p) { return p.textContent.trim(); })
       .filter(Boolean);
 
     if (paragraphs.length > 0) return paragraphs.join("\n\n");
-    return content.textContent?.trim() ?? "İçerik bulunamadı.";
+    return content.textContent.trim() || "İçerik bulunamadı.";
   },
 };
