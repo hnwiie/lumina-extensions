@@ -88,7 +88,18 @@ export default {
         if (match) rating = parseFloat(match[1]).toFixed(1);
       }
 
-      return { id: url, title: (titleEl ? titleEl.textContent.trim() : ""), url, coverUrl, author, rating, status: "Ongoing" };
+      // Chapter sayısı — "X Chapters" span
+      let totalChapters = 0;
+      const allSpans = el.querySelectorAll("span");
+      for (const s of Array.from(allSpans)) {
+        const txt = s.textContent.trim();
+        if (txt.toLowerCase().includes("chapter")) {
+          const num = parseInt(txt);
+          if (!isNaN(num)) { totalChapters = num; break; }
+        }
+      }
+
+      return { id: url, title: (titleEl ? titleEl.textContent.trim() : ""), url, coverUrl, author, rating, totalChapters, status: "Ongoing" };
     }).filter(function(n) { return n.url && n.title; });
   },
   async searchNovels(query, page) {
