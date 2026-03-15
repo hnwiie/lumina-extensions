@@ -80,11 +80,17 @@ export default {
       // Kapak
       const coverUrl = (imgEl && (imgEl.getAttribute("data-src") || imgEl.getAttribute("src"))) || "";
 
-      return { id: url, title: (titleEl ? titleEl.textContent.trim() : ""), url, coverUrl, author, status: "Ongoing" };
+      // Rating — aria-label="Rating: X.XX out of 5"
+      let rating = "";
+      const ratingEl = el.querySelector("[aria-label*='Rating']");
+      if (ratingEl) {
+        const match = (ratingEl.getAttribute("aria-label") || "").match(/([\d.]+)\s+out/);
+        if (match) rating = parseFloat(match[1]).toFixed(1);
+      }
+
+      return { id: url, title: (titleEl ? titleEl.textContent.trim() : ""), url, coverUrl, author, rating, status: "Ongoing" };
     }).filter(function(n) { return n.url && n.title; });
   },
-
-  // ─── Arama ────────────────────────────────────────────
   async searchNovels(query, page) {
     page = page || 1;
     const q   = encodeURIComponent(query);
