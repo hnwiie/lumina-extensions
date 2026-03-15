@@ -1,0 +1,31 @@
+{
+  "name": "Lumina Extensions",
+  "extensions": [
+    {
+      "id": "royalroad",
+      "name": "Royal Road",
+      "version": "1.0.0",
+      "lang": "EN",
+      "langFlag": "🇺🇸",
+      "icon": "RR",
+      "color": "from-blue-600 via-indigo-500 to-violet-600",
+      "novelCount": 100000,
+      "file": "royalroad.js",
+      "baseUrl": "https://www.royalroad.com",
+      "nsfw": false
+    },
+    {
+      "id": "novelfull",
+      "name": "NovelFull",
+      "version": "1.0.0",
+      "lang": "EN",
+      "langFlag": "🇺🇸",
+      "icon": "NF",
+      "color": "from-violet-600 via-purple-500 to-indigo-600",
+      "novelCount": 8420,
+      "file": "novelfull.js",
+      "baseUrl": "https://novelfull.net",
+      "nsfw": false
+    }
+  ]
+}
