@@ -163,12 +163,20 @@ export default {
     const statusEl = doc.querySelector(".label.label-sm, .fiction-status");
     const status   = statusEl && statusEl.textContent.toLowerCase().includes("ongoing") ? "Ongoing" : "Completed";
 
+    // Rating — aria-label="Rating: X.XX out of 5"
+    let rating = "";
+    const ratingEl = doc.querySelector("[aria-label*='Rating']");
+    if (ratingEl) {
+      const match = (ratingEl.getAttribute("aria-label") || "").match(/[\d.]+/);
+      if (match) rating = parseFloat(match[0]).toFixed(1);
+    }
+
     // Genres — span.tags a.fiction-tag
     const genres = Array.from(doc.querySelectorAll("span.tags a.fiction-tag"))
       .map(function(a) { return a.textContent.trim(); })
       .filter(Boolean);
 
-    return { coverUrl, synopsis, author, publishDate, status, genres };
+    return { coverUrl, synopsis, author, publishDate, status, genres, rating };
   },
 
   // ─── Chapter listesi ──────────────────────────────────
